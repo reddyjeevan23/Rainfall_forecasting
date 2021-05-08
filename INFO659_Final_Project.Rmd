@@ -1,0 +1,463 @@
+---
+title: "INFO659: Project on Rainfall Forcasting"
+output: html_notebook
+---
+
+### Project Team 4
+
+1.	Suresh Athanti - SA3663
+2.	Jeevan reddy Geereddy - JG3687
+3.	Karthikreddy Kuna - KK3375
+
+
+### Introduction:
+
+Rainfall prediction remains a serious concern and has attracted the attention of governments, industries, risk management entities and scientiﬁc community. Rainfall is a climatic factor that aﬀects many human activities like agricultural production, construction, power generation, forestry and tourism, among others.
+
+Weather forecasting is done to predict to weather conditions in future time. The climatic conditions are based on the factors like wind speed, directions, humidity, temperature and locations. Forecasts of meteorological time series can help decision-making processes carried out by organizations responsible of disaster prevention. Therefore, having an appropriate approach for rainfall prediction makes it possible to take preventive and mitigation measures for these natural phenomena.
+
+
+### Problem Statement:
+
+The objective of this project is to predict the rainfall in Australia based on the factors like wind speed, directions, humidity, temperature and locations. It is mainly focused on the development of models for rainfall prediction of Australia daily basis.
+
+
+### Data Sources:
+
+In order to predict the rain, the base dataset containing daily weather observations from numerous Australian weather stations are collected, which was created from the source available from http://www.bom.gov.au/climate/data.
+We pulled out this dataset from Kaggle for our analysis purpose which can be accessed using following link https://www.kaggle.com/jsphyg/weather-dataset-rattle-package. The data gathered comprises more than a decade of measurements taken in real time and on reading the dataset for few samples, we observed that the data needs cleaning as it contains redundant data.
+
+
+### Attribute description in the Dataset:
+
+-->Dataset had different types of data attributes whose columns description is as below:
+
+Date  - Date of observation.<br>
+Location -Name of the location of the weather station.<br>
+MinTemp - Minimum temperature in degrees celsius.<br>
+MaxTemp - Maximum temperature in degrees celsius.<br>
+Rainfall - Amount of rainfall recorded for the day in mm.<br>
+Evaporation - The so-called Class A pan evaporation (mm) in the 24 hours to 9am.<br>
+Sunshine - Number of hours of bright sunshine on the single day.<br>
+WindGustDir - Direction of the strongest wind gust in the 24 hours.<br>
+WindGustSpeed - Speed (km/h) of the strongest wind gust in the 24 hours.<br>
+WindDir9am - Direction of the wind at 9am.<br>
+WindDir3pm - Direction of the wind at 3pm.<br>
+WindSpeed9am - Wind speed (km/hr) averaged over 10 minutes prior to 9am.<br>
+WindSpeed3pm - Wind speed (km/hr) averaged over 10 minutes prior to 3pm.<br>
+Humidity9am - Humidity (percent) at 9am.<br>
+Humidity3pm -Humidity (percent) at 3pm.<br>
+Pressure9am - Atmospheric pressure (hpa) reduced to mean sea level at 9am.<br>
+Pressure3pm - Atmospheric pressure (hpa) reduced to mean sea level at 3pm.<br>
+Cloud9am - Fraction of sky obscured by cloud at 9am. This is measured in "oktas", which are a unit of eigths. It records how many eigths of the sky are obscured by cloud. A 0 measure indicates completely clear sky whilst an 8 indicates that it is completely overcast.<br>
+Cloud3pm -Fraction of sky obscured by cloud (in "oktas": eighths) at 3pm. See Cload9am for a description of the values.<br>
+Temp9am - Temperature (degrees C) at 9am.<br>
+Temp3pm - Temperature (degrees C) at 3pm.<br>
+RainToday - Boolean 1 if precipitation (mm) in the 24 hours to 9am exceeds 1mm, otherwise 0<br>
+RISK_MM - Amount of next day rain in mm. Used to create response variable RainTomorrow. A kind of measure of the "risk".<br>
+RainTomorrow - Target variable to predict tomorrows rain.<br>
+
+
+### Data Preparation:
+
+--> Initially, all the required libraries to perform our analysis was loaded into the project.
+
+```{r}
+
+library(ggplot2)
+library(rpart.plot)
+library(cowplot)
+library(ROCR)
+library(dplyr)
+library(caTools)
+library(plyr)
+library(corrplot)
+library(caret)
+library(caretEnsemble)
+
+```
+
+### Importing the dataset:
+
+--> We have imported the original dataset and the format of the same was CSV.
+In the next step we are finding the class of each attribute in the dataset.
+
+```{r}
+weather_data <- read.csv("weatherAUS.csv")
+```
+
+```{r}
+str(weather_data)
+```
+
+--> Based on below relation, it is observed that RiskMM is equalent to the Rain Tomorrow.
+
+```{r}
+
+all.equal(weather_data$RISK_MM > 1, weather_data$RainTomorrow == "Yes")
+
+all.equal(weather_data$Rainfall > 1, weather_data$RainToday == "Yes")
+
+```
+
+### Cleaning the Data
+
+--> Here, we are checking for the incomplete fields(NA) in the data and the results are printed as per coloumn.
+
+```{r}
+
+cols_withNa <- apply(weather_data, 2, function(x) sum(is.na(x)))
+
+cols_withNa
+
+```
+
+--> We have identified the potential required fields in the dataset and the remaining fields which are not suitable or improperly formatted for the analysis are omitted.
+
+-->Below are the various attributes which are dropped from the data set for further analysis.
+Date, Evaporation, Sunshine, Cloud9am, Cloud3pm, RISK_MM, Location, WindGustDir, WindDir9am, WindDir3pm.
+
+```{r}
+
+weather_data$Date<-NULL
+weather_data$Evaporation<-NULL
+weather_data$Sunshine<-NULL
+weather_data$Cloud9am<-NULL
+weather_data$Cloud3pm<-NULL
+weather_data$RISK_MM<-NULL
+weather_data$Location<-NULL
+weather_data$WindGustDir<-NULL
+weather_data$WindDir9am<-NULL
+weather_data$WindDir3pm<-NULL
+
+```
+
+
+-->After removing the attributes which are no longer required for analysis, we have cleaned the data which contains NA values.
+
+-->Below are the attributes which are considered for further analysis.
+MinTemp,MaxTemp,WindGustSpeed,Humidity,Rainfall
+
+```{r}
+
+weather_data$MinTemp <- c(weather_data$MinTemp[2:nrow(weather_data)], NA)
+weather_data$MaxTemp <- c(weather_data$MaxTemp[2:nrow(weather_data)], NA)
+weather_data$WindGustSpeed <- c(weather_data$WindGustSpeed[2:nrow(weather_data)], NA)
+weather_data$Humidity3pm <- c(weather_data$Humidity3pm[2:nrow(weather_data)], NA)
+weather_data$Rainfall <- c(weather_data$Rainfall[2:nrow(weather_data)], NA)
+
+```
+
+-->The below data represents the effective attributes which contains clean data and are apt for performing analysis.
+
+```{r}
+
+weather_data1 = weather_data[complete.cases(weather_data),]
+head(weather_data1)
+
+```
+
+--> Checking the attributes for NA values after clening the data. the below shows the results.
+
+```{r}
+
+cols_withNa <- apply(weather_data1, 2, function(x) sum(is.na(x)))
+
+cols_withNa
+```
+
+### Categorical Variable Analysis
+
+-->Identifying the Factor class variables in the dataset.
+
+```{r}
+
+factor_vars <- names(which(sapply(weather_data1, class) == "factor"))
+factor_vars <- setdiff(factor_vars, "RainTomorrow")
+factor_vars
+
+```
+
+--> Chi-square test was performed to understand how well the observed distribution of data fits with distribution that is expected if the variables are independent.
+
+```{r}
+
+chisq_test_res <- lapply(factor_vars, function(x) { chisq.test(weather_data1[,x], weather_data1[, "RainTomorrow"], simulate.p.value = TRUE)})
+names(chisq_test_res) <- factor_vars
+chisq_test_res
+
+```
+
+--> Finding the numeric variables from the dataset:
+
+```{r}
+library(corrplot)
+
+numeric_vars <- setdiff(colnames(weather_data1), factor_vars)
+numeric_vars <- setdiff(numeric_vars, "RainTomorrow")
+numeric_vars
+
+```
+
+--> Finding the correlation of the numerical and integer variables:
+Below image proves the relationship among strongest attributes in the data.
+
+```{r}
+
+numeric_vars_matrix <- as.matrix(weather_data1[, numeric_vars, drop=FALSE])
+numeric_vars_cor <- cor(numeric_vars_matrix)
+corrplot(numeric_vars_cor, method="number")
+
+```
+
+--> Converting categorical values from "Yes/No" to "0/1" to proceed with the further analysis on the data.
+
+```{r}
+
+library(plyr)
+
+weather_data1$RainTomorrow <- revalue(weather_data1$RainTomorrow, c("Yes"=1))
+weather_data1$RainTomorrow <- revalue(weather_data1$RainTomorrow, c("No"=0))
+
+weather_data1$RainToday <- revalue(weather_data1$RainToday, c("Yes"=1))
+weather_data1$RainToday <- revalue(weather_data1$RainToday, c("No"=0))
+
+weather_data1
+```
+
+--> We have plotted the histogram representation of the data against various attributes and observed that the data was normally distributed. Hence, any transformation of data was not necessarily required.
+
+```{r}
+
+hist(weather_data1$Pressure9am)
+hist(weather_data1$Temp9am)
+hist(weather_data1$Humidity3pm)
+hist(weather_data1$MinTemp)
+
+```
+
+
+### Splitting train and test data:
+
+--> The data is splitted as training and test sets, split ratio for the training set was 75% and test set was 25%. we have used simple.split function for splitting operation. 
+
+```{r}
+
+set.seed(123)
+library(caTools)
+split = sample.split(weather_data1$RainTomorrow, SplitRatio = 0.75)
+training_set = subset(weather_data1, split == TRUE)
+test_set = subset(weather_data1, split == FALSE)
+View(training_set)
+
+```
+
+#### Methodology:
+
+### LOGISTIC REGRESSION MODEL
+
+-->Logistic Regression is used when the dependent variable(target) are categorical.
+
+-->Here, the data related to weather information has categorical values i.e(Yes/NO), which was in return required to predict whether it will rain tomorrow.
+In our case, this dataset is very much suitable for applying Logistic regression.
+
+Steps --> 1. First, we have trained the model with Training set data and printed the summary of the model. 
+--> 2. Once the Model was trained,we used the test set data to predict the results for the $RainTomorrow
+--> 3. We have predicted the output for the test set data and their predicted results are shown below.
+
+--> Confusion Matrix shows the Accuracy, precision and Kappa values.
+
+### Modeling and Results:
+
+--> Model training was performed using training set data.
+
+```{r}
+
+model <- glm ( RainTomorrow ~WindGustSpeed+Humidity3pm+Pressure3pm, data = training_set, family = binomial)
+summary(model)
+
+```
+
+-->Using trained model, we have predicted the results on the Test data.
+
+```{r}
+
+prob_pred = predict(model, type = 'response', newdata = test_set[-14])
+y_pred = ifelse(prob_pred > 0.5, 1, 0)
+cm = table(test_set[, 14], y_pred>0.5)
+print(cm)
+
+```
+
+### Confusion matrix: 
+
+Accuracy: 80.46
+Kappa: 0.3124
+
+```{r}
+
+confusionMatrix(factor(y_pred), factor(test_set$RainTomorrow),positive = "1")
+
+```
+
+--> The accuracy percentage of model based on the training data is 81.60 and on test data is 80.46.
+
+```{r}
+
+predict <- predict(model, type = 'response')
+tab<-table(training_set$RainTomorrow, predict > 0.5)
+
+library(ROCR)
+ROCRpred <- prediction(predict, training_set$RainTomorrow)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+prediction(predict, training_set$RainTomorrow) %>%
+  performance(measure = "auc") %>%
+  .@y.values
+
+
+```
+
+```{r}
+
+predicted.data<-data.frame(probability.of.RainTomorrow=model$fitted.values,RainTomorrow=training_set$RainTomorrow)
+
+predicted.data<-predicted.data[order(predicted.data$probability.of.RainTomorrow,decreasing=FALSE),]
+predicted.data$rank<-1:nrow(predicted.data)
+
+ggplot(data=predicted.data, aes(x=rank, y=probability.of.RainTomorrow))+
+  geom_point(aes(colour=RainTomorrow),alpha=1, shape=4, stroke=2) + xlab("INDEX")+
+  ylab("RainTomorrw")
+
+```
+
+### Model running for different variables for accuracy test: 
+
+```{r}
+
+model1_linear <- glm ( RainTomorrow ~MinTemp+MaxTemp+WindSpeed9am+Humidity9am, data = training_set, family = binomial)
+summary(model1_linear)
+
+```
+
+Prediction on Test Dataset:
+
+```{r}
+
+prob_pred = predict(model1_linear, type = 'response', newdata = test_set[-14])
+y_pred1 = ifelse(prob_pred > 0.5, 1, 0)
+cm1 = table(test_set[, 14], y_pred1>0.5)
+print(cm1)
+
+```
+
+### Confusion Matrix:
+
+Accuracy: 80.96
+Kappa: 0.3382
+
+```{r}
+
+confusionMatrix(factor(y_pred1), factor(test_set$RainTomorrow),positive = "1")
+
+```
+
+### DECISION TREE MODEL
+
+--> Decision Tree can handle both Categorical and Numerical Data.
+We have used the same Training and test data for the model training and prediction.
+
+Below is the Decision Tree Model:
+
+```{r}
+Decisiontr <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+decisiontree_fit <- train(RainTomorrow ~MaxTemp+Humidity9am+WindSpeed9am, data = training_set, method = "rpart",
+                   parms = list(split = "information"),
+                   trControl=Decisiontr,
+                   tuneLength = 5)
+prp(decisiontree_fit$finalModel, box.palette = "Reds", tweak = 1)
+```
+
+--> We are applying the trained model on the Test data and results are predicted.
+
+Cunfusion Matrix:
+Accuracy: 79.3
+Kappa: 0.1753
+
+```{r}
+
+predict(decisiontree_fit, newdata = test_set[1,])
+test_pred <- predict(decisiontree_fit, newdata = test_set)
+confusionMatrix(test_pred, test_set$RainTomorrow ) 
+
+```
+
+### NAIVE BAYES MODEL:
+
+--> Naive Bayes is an algorithm based on conditional probability and countng. It assumes that all the variables are contiditional independent.
+
+--> The e1071 package in R has a built in Naive Bayee function that can compute the conditional probabilities of a independent predictor variables using Bayes rule.
+
+--> We have used the same Training and test data for the model training and prediction.
+
+```{r}
+
+library(e1071)
+naive_model <- naiveBayes(RainTomorrow ~MaxTemp+Humidity9am+WindSpeed9am, training_set)
+naive_model
+
+```
+
+--> Trained model was used on the Test data and results are predicted.
+
+Cunfusion Matrix:
+Accuracy: 78.19
+Kappa: 0.1602
+
+```{r}
+
+test_naive <- predict(naive_model, test_set)
+confusionMatrix(test_naive, test_set$RainTomorrow ) 
+
+```
+
+### Comparision of models:
+
+--> The modeling is performed on three models Logistic Regression, Decision Tree and Navie Bayes Models. The obtained results are as follows:
+
+Logistic Regression:
+
+Accuracy: 80.46
+Kappa: 0.3124
+
+Decision Tree:
+
+Accuracy: 79.3
+Kappa: 0.1753
+
+Navie Bayes:
+
+Accuracy: 78.19
+Kappa: 0.1602
+
+
+### Major Challenges:
+
+--> 1.Dataset was in different formats and it has so much unwanted and improperly formatted data which has lot of NA values. 
+
+--> 2.Dataset cleaning was a time consuming and tricky task for our analysis.
+
+--> 3. Different models, however had the tendency to over detect positive cases resulting in low postive preditcion rate of approxmately 60%. 
+
+
+### Results and Conclusion:
+
+--> 1. Upon analysis, logistic regression model was rated has the best model with a highest accuracy score of 80.46. So, the model does a very good job compared to  in predicting whether or not it will rain tomorrow in Australia.
+
+--> 2.Small number of observations predict that there will be rain tomorrow. Majority of observations predict that there will be no rain tomorrow.
+
+--> 3.ROC, AUC of our model gives the same accuracy as test data. So, we can conclude that our classifier does a good job in predicting whether it will rain tomorrow or not.
+
+--> 4. By observing the results from above models we could conclude that logistic regression gives best results whether it will rain tommorow or not.
+
+
