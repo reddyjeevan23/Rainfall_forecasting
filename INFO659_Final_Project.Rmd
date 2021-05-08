@@ -3,14 +3,14 @@ title: "INFO659: Project on Rainfall Forcasting"
 output: html_notebook
 ---
 
-### Project Team 4
+## Project Team 4
 
 1.	Suresh Athanti - SA3663
 2.	Jeevan reddy Geereddy - JG3687
 3.	Karthikreddy Kuna - KK3375
 
 
-### Introduction:
+## Introduction:
 
 Rainfall prediction remains a serious concern and has attracted the attention of governments, industries, risk management entities and scientiﬁc community. Rainfall is a climatic factor that aﬀects many human activities like agricultural production, construction, power generation, forestry and tourism, among others.
 
